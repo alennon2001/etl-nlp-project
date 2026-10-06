@@ -3,6 +3,42 @@
 This repository contains a partly implemented local banking analytics pipeline.
 Snowflake migration is planned work; the current loader targets Postgres.
 
+## Project Python environment
+
+Use uv from the project root to recreate the shared ingestion/dbt environment:
+
+```sh
+uv sync --locked
+```
+
+`uv sync` creates or synchronizes `.venv`. The `--locked` option requires the
+committed lockfile to agree with the dependency manifest rather than changing
+dependency resolution. `.python-version` selects Python 3.12.13;
+`pyproject.toml` constrains the project to Python 3.12 and declares
+dbt-snowflake, pandas, SQLAlchemy and psycopg2-binary. `uv.lock` records their
+resolved versions and transitive dependencies. This is a scripts/dbt project:
+uv does not build or install the repository itself as a Python package.
+
+Use `uv run` to execute commands in this environment without activating it:
+
+```sh
+uv run python --version
+uv run dbt --version
+```
+
+For dbt model commands, change into `dbt/` first; uv can locate the parent
+project environment. Model execution still requires separate connection
+configuration and completion of the missing staging models.
+
+In VS Code, open the project folder, run **Python: Select Interpreter** from
+the Command Palette, choose **Enter interpreter path**, and select
+`.venv/bin/python` inside this project. Selecting that interpreter does not
+automatically export credentials from `.env`; use the explicit environment
+setup below for terminal ingestion commands.
+
+No separate Snowflake ingestion library is declared yet. dbt-snowflake brings
+its own connector dependencies; a Snowflake loader is still planned work.
+
 ## Current pipeline
 
 1. Spoof configurations in `configs/`, grouped by
@@ -47,7 +83,7 @@ with the variables exported in a subshell:
   set -a
   . ./.env
   set +a
-  python3 scripts/load_csvs.py
+  uv run python scripts/load_csvs.py
 )
 ```
 
