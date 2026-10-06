@@ -1,0 +1,33 @@
+{
+    "files": [
+      {
+        "config": {
+          "file_name": "customers.csv",
+          "delimiter": ",",
+          "row_count": "1000",
+          "include_headers": true,
+          "seed": "1234"
+        },
+        "fields": [
+          {
+            "name": "customer_id",
+            "type": "uuid"
+          },
+          {
+            "name": "status",
+            "type": "foreach",
+            "values": "active,dormant,closed"
+          },
+          {
+            "name": "email",
+            "type": "email"
+          },
+          {
+            "name": "created_at",
+            "type": "timestamp",
+            "format": "2006-01-02"
+          }
+        ]
+      }
+    ]
+  }

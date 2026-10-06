@@ -1,0 +1,16 @@
+{
+    "files": [
+      {
+        "source": "configs/customers.json"
+      },
+      {
+        "source": "configs/accounts.json"
+      },
+        {
+            "source": "configs/transactions.json"
+        },
+        {
+            "source": "configs/cards.json"
+        }
+    ]
+  }
