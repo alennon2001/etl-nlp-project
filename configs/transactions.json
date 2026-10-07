@@ -1,0 +1,58 @@
+{
+    "files": [
+      {
+        "config": {
+          "file_name": "transactions.csv",
+          "delimiter": ",",
+          "row_count": "10000",
+          "include_headers": true,
+          "seed": "1234"
+        },
+        "cache": {
+          "source": "output/accounts.csv"
+        },
+        "fields": [
+          {
+            "name": "transaction_id",
+            "type": "uuid"
+          },
+          {
+            "name": "account_id",
+            "seed": true,
+            "alias": "account_id"
+          },
+          {
+            "name": "transaction_type",
+            "type": "foreach",
+            "values": "payment,refund"
+          },
+          {
+            "name": "merchant_category",
+            "type": "foreach",
+            "values": "groceries,travel,utilities,entertainment"
+          },
+          {
+            "name": "amount",
+            "type": "number",
+            "min": 1,
+            "max": 500
+          },
+          {
+            "name": "direction",
+            "type": "foreach",
+            "values": "credit,debit"
+          },
+          {
+            "name": "transaction_date",
+            "type": "timestamp",
+            "format": "2006-01-02"
+          },
+          {
+            "name": "status",
+            "type": "range",
+            "values": "pending,completed,failed"
+          }
+        ]
+      }
+    ]
+  }

@@ -1,0 +1,48 @@
+{
+    "files": [
+      {
+        "config": {
+          "file_name": "accounts.csv",
+          "delimiter": ",",
+          "row_count": "2000",
+          "include_headers": true,
+          "seed": "1234"
+        },
+        "cache": {
+          "source": "output/customers.csv"
+        },
+        "fields": [
+          {
+            "name": "account_id",
+            "type": "uuid"
+          },
+          {
+            "name": "customer_id",
+            "seed": true,
+            "alias": "customer_id"
+          },
+          {
+            "name": "account_type",
+            "type": "foreach",
+            "values": "current,savings,credit"
+          },
+          {
+            "name": "spend_profile",
+            "type": "foreach",
+            "values": "low_spender,normal,high_spender"
+          },
+          {
+            "name": "balance",
+            "type": "number",
+            "min": 0,
+            "max": 10000
+          },
+          {
+            "name": "opened_at",
+            "type": "timestamp",
+            "function": "random:dir=past,interval=5y"
+          }
+        ]
+      }
+    ]
+  }

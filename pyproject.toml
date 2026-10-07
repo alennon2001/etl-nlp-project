@@ -1,0 +1,16 @@
+[project]
+name = "etl-nlp-project"
+version = "0.1.0"
+description = "Banking ingestion scripts and dbt analytics project"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "dbt-snowflake",
+    "pandas",
+    "SQLAlchemy",
+    "psycopg2-binary",
+    "snowflake-connector-python",
+    "PyYAML",
+]
+
+[tool.uv]
+package = false

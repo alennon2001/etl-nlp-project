@@ -1,0 +1,48 @@
+{
+    "files": [
+      {
+        "config": {
+          "file_name": "cards.csv",
+          "delimiter": ",",
+          "row_count": "3000",
+          "include_headers": true,
+          "seed": "1234"
+        },
+  
+        "cache": {
+          "source": "output/accounts.csv"
+        },
+  
+        "fields": [
+          {
+            "name": "card_id",
+            "type": "uuid"
+          },
+  
+          {
+            "name": "account_id",
+            "seed": true,
+            "alias": "account_id"
+          },
+  
+          {
+            "name": "card_type",
+            "type": "foreach",
+            "values": "debit,credit"
+          },
+  
+          {
+            "name": "status",
+            "type": "foreach",
+            "values": "active,blocked,expired"
+          },
+  
+          {
+            "name": "created_at",
+            "type": "timestamp",
+            "format": "2006-01-02"
+          }
+        ]
+      }
+    ]
+  }

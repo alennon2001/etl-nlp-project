@@ -1,0 +1,50 @@
+# macOS metadata
+.DS_Store
+._*
+.Spotlight-V100/
+.Trashes/
+
+# Python virtual environments and caches
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+
+# Local logs and dbt generated artifacts
+logs/
+*.log
+dbt/target/
+dbt/dbt_packages/
+
+# Local configuration containing secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+profiles.yml
+profiles.yaml
+.aws/
+credentials.json
+credentials.yml
+credentials.yaml
+secrets.json
+secrets.yml
+secrets.yaml
+*.pem
+*.key
+
+# Local project dump duplicates files containing credentials
+/full_project.txt
+
+# Generated banking CSVs are excluded from the migration baseline
+/output/*.csv
+/output/banking-v2/
+
+# Immutable local training-data snapshots
+/data_snapshots/
