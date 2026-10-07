@@ -396,6 +396,8 @@ dependencies = [
     { name = "dbt-snowflake" },
     { name = "pandas" },
     { name = "psycopg2-binary" },
+    { name = "pyyaml" },
+    { name = "snowflake-connector-python" },
     { name = "sqlalchemy" },
 ]
 
@@ -404,6 +406,8 @@ requires-dist = [
     { name = "dbt-snowflake" },
     { name = "pandas" },
     { name = "psycopg2-binary" },
+    { name = "pyyaml" },
+    { name = "snowflake-connector-python" },
     { name = "sqlalchemy" },
 ]
 

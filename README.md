@@ -36,8 +36,8 @@ the Command Palette, choose **Enter interpreter path**, and select
 automatically export credentials from `.env`; use the explicit environment
 setup below for terminal ingestion commands.
 
-No separate Snowflake ingestion library is declared yet. dbt-snowflake brings
-its own connector dependencies; a Snowflake loader is still planned work.
+The Snowflake loader directly imports `snowflake-connector-python` and PyYAML;
+both are declared dependencies resolved together with dbt-snowflake.
 
 ## Current pipeline
 
@@ -86,6 +86,69 @@ See [the dataset specification](docs/banking-v2-dataset.md) for the schema,
 training assumptions, status allocations and full verification results.
 The legacy Postgres loader still uses the original root-level CSVs; it does
 not load the v2 dataset.
+
+## First Snowflake transaction load
+
+The loader is implemented and locally checked, but no Snowflake load has
+been executed. Its only data target is `BANKING_ANALYTICS.RAW.TRANSACTIONS`.
+
+First validate locally, without any connection or passphrase prompt:
+
+```sh
+uv run python scripts/load_transactions_snowflake.py --validate-only
+```
+
+It verifies all frozen snapshot hashes, the v2 CSV hash and input provenance
+in `generation.json`, the exact ten-column header and every dataset rule.
+The same validation runs automatically before an actual load.
+
+Next execute `sql/snowflake/02_raw_transactions.sql` yourself in a Snowflake
+worksheet. It uses `BANKING_DEVELOPER` and `BANKING_DEV_WH`, creates the RAW
+schema/table only if absent, and never replaces or clears an existing table.
+It requires the appropriate schema/table creation privileges. Creation is
+separate because Snowflake DDL implicitly commits transactions; the Python
+insert transaction contains no DDL. An incompatible existing table makes the
+loader stop rather than changing its structure.
+
+From the repository root, run the interactive load:
+
+```sh
+uv run python scripts/load_transactions_snowflake.py
+```
+
+The script reads only `etl_project.outputs.snowflake_dev` from the local
+`~/.dbt/profiles.yml`, preserving that file and the Postgres output. It uses
+the established account/login/key path and requires `BANKING_DEVELOPER`,
+`BANKING_DEV_WH` and `BANKING_ANALYTICS`. It sets the loading schema to RAW
+without changing dbt's configured DBT_AOIFE schema. An encrypted-key passphrase
+is requested privately using a terminal prompt, never placed in Git, logged,
+or read from the dbt passphrase environment variable. Use the replacement
+key's passphrase. If hidden input is unavailable, the script stops.
+
+IDs remain strings, amounts use Python `Decimal`, dates are explicitly parsed,
+and blank payment `original_transaction_id` values become SQL NULL.
+The loader checks target column names/order/types and refuses a nonempty
+table. It then inserts 500-row parameterized batches with autocommit disabled.
+Before committing, it compares row count, unique transaction count, and exact
+amount sums plus counts grouped by currency, transaction type, direction and
+status. An insert or reconciliation failure triggers rollback; the connection
+is closed afterward. Library error text is withheld to avoid exposing secrets;
+Snowflake error codes and the failure phase provide diagnostic context.
+
+Run only one loader at a time and avoid other writers during the load. An
+empty-table precheck is not a concurrency lock. A successful rerun stops
+because the table contains data: there is no automatic append, truncate or
+replacement. If connection loss prevents confirming a commit/rollback,
+inspect the target in Snowflake before retrying; do not assume it is empty.
+
+Local checks completed: validation of the actual 10,000-row CSV, eight tests
+using fake connections for transaction/reconciliation and hash protections,
+and `uv pip check`. These do not establish live permissions or successful
+loading. To repeat the tests without contacting Snowflake:
+
+```sh
+uv run python -m unittest discover -s tests -v
+```
 
 `scripts/etl_pipeline.py` is a separate retail-data cleaning example with local
 file paths. It is not part of the banking loader. NLP is not implemented.
@@ -154,7 +217,8 @@ The first proposed flow is a Snowflake raw transactions table, a declared dbt
 source, `stg_transactions` with explicit types and data tests, and a monthly
 summary of completed transactions with counts and debit/credit totals.
 Local dbt Core key-pair connection testing for `snowflake_dev` has passed
-(user-run). CSV loading into Snowflake, active dbt models/tests and a connection
+(user-run). The raw-table definition and Python loader are implemented;
+their first live load is pending. Active dbt models/tests and a connection
 in the dbt browser UI still need implementation. The browser UI does not automatically load local
 CSVs or execute this Postgres loader.
 

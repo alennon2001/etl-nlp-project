@@ -8,6 +8,8 @@ dependencies = [
     "pandas",
     "SQLAlchemy",
     "psycopg2-binary",
+    "snowflake-connector-python",
+    "PyYAML",
 ]
 
 [tool.uv]

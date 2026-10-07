@@ -116,7 +116,13 @@ Verified on October 7, 2026:
 CSV SHA-256:
 `119498f5d5fbc3dde9f3da8fee4e3b7e45e89ee0bd453a877d31cf62c68f0f74`.
 
-Remaining work: design the Snowflake raw table and controlled loading step,
-then implement source declarations, transaction staging, monthly summary and
-dbt data tests. The original incomplete dbt models are preserved in
+The Snowflake raw table definition and controlled loader are now implemented
+in `sql/snowflake/02_raw_transactions.sql` and
+`scripts/load_transactions_snowflake.py`. Local input validation and fake
+transaction tests passed; no live load has run. The loader represents blank
+payment parent IDs as SQL NULL and amounts as exact NUMBER(18,2) values.
+
+Remaining work: execute table setup and the interactive load, then implement
+source declarations, transaction staging, monthly summary and dbt data tests.
+The original incomplete dbt models are preserved in
 `archive/dbt/models/`, outside active resource paths.
