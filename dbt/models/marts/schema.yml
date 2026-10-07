@@ -1,0 +1,23 @@
+version: 2
+
+models:
+  - name: monthly_transaction_summary
+    description: "One row per calendar month/currency, completed transactions only."
+    columns:
+      - name: transaction_month
+        data_tests: [not_null]
+      - name: currency
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['GBP']
+      - name: transaction_count
+        data_tests: [not_null]
+      - name: debit_total
+        data_tests: [not_null]
+      - name: credit_total
+        data_tests: [not_null]
+      - name: net_outflow
+        description: "Debit total minus credit total; positive means net customer outflow."
+        data_tests: [not_null]

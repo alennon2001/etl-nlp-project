@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: banking_raw
+    description: "Validated banking-v2 training transactions loaded separately from dbt."
+    database: BANKING_ANALYTICS
+    schema: RAW
+    tables:
+      - name: transactions
+        identifier: TRANSACTIONS
+        description: "One row per payment or refund attempt, including every status."

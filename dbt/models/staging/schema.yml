@@ -1,0 +1,46 @@
+version: 2
+
+models:
+  - name: stg_transactions
+    description: "One row per transaction attempt; preserves pending and failed records."
+    columns:
+      - name: transaction_id
+        data_tests: [unique, not_null]
+      - name: account_id
+        data_tests: [not_null]
+      - name: transaction_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['payment', 'refund']
+      - name: merchant_category
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['groceries', 'travel', 'utilities', 'entertainment']
+      - name: amount
+        data_tests: [not_null]
+      - name: direction
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['debit', 'credit']
+      - name: transaction_date
+        data_tests: [not_null]
+      - name: status
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['completed', 'pending', 'failed']
+      - name: currency
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['GBP']
+      - name: original_transaction_id
+        description: "NULL for payments; completed payment UUID for every refund attempt."

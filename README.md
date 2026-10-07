@@ -28,7 +28,8 @@ uv run dbt --version
 
 For dbt model commands, change into `dbt/` first; uv can locate the parent
 project environment. Model execution still requires separate connection
-configuration and completion of the missing staging models.
+configuration. The first transaction flow is implemented; database build
+and test results remain pending execution.
 
 In VS Code, open the project folder, run **Python: Select Interpreter** from
 the Command Palette, choose **Enter interpreter path**, and select
@@ -52,7 +53,8 @@ both are declared dependencies resolved together with dbt-snowflake.
    it does not append, validate business rules or define key constraints.
 4. `docker-compose.yml` defines Postgres 15 with a persistent `pgdata` volume.
    It does not execute Python or dbt.
-5. The dbt project in `dbt/` is ready for new transaction models. Its five
+5. The dbt project in `dbt/` implements raw transactions → transaction staging
+   → completed monthly summary. Its five
    unfinished banking marts and original starter models are preserved in
    `archive/dbt/models/`, outside the active `dbt/models/` resource path.
 
@@ -89,8 +91,10 @@ not load the v2 dataset.
 
 ## First Snowflake transaction load
 
-The loader is implemented and locally checked, but no Snowflake load has
-been executed. Its only data target is `BANKING_ANALYTICS.RAW.TRANSACTIONS`.
+The loader is implemented and locally checked. The user reports a successful
+Snowflake load of 10,000 rows with 10,000 distinct IDs and April 21–September 30
+dates. All six reported grouped counts and exact amount totals match the CSV.
+Its only data target is `BANKING_ANALYTICS.RAW.TRANSACTIONS`.
 
 First validate locally, without any connection or passphrase prompt:
 
@@ -197,29 +201,77 @@ The persistent Postgres volume retains its initialized database. Changing
 credentials in `.env` does not automatically change credentials in an already
 initialized database.
 
-## Known dbt gaps
+## First dbt flow
 
-There are no active raw source declarations, staging models or banking tests.
-The archived banking marts reference missing `stg_customers`, `stg_accounts`
-and `stg_transactions` models. The archived starter examples retain their
-original tests. dbt connection configuration is
-separate from the Python loader and must be configured locally or in the dbt
-platform; local `profiles.yml` files are ignored.
+`banking_raw.transactions` declares the existing external table
+`BANKING_ANALYTICS.RAW.TRANSACTIONS`. `source('banking_raw', 'transactions')`
+resolves that input and records lineage; it does not create or reload raw data.
 
-The customer activity SQL compares `transaction_type` to `debit` and `credit`,
-but generated data stores those values in `direction`. Its spend/income logic
-needs correction and agreed status/time-window rules. Other thresholds and
-the assumed 2% revenue calculation also need review.
+`stg_transactions` explicitly selects and types all ten columns. Its grain
+is one row per transaction attempt, preserving every status and exact amounts.
+Blank payment parent IDs are normalized to NULL. It does not filter or
+deduplicate rows. `monthly_transaction_summary` uses `ref('stg_transactions')`
+to resolve the dbt-created view and establish build order. It filters completed
+rows and groups by calendar month and currency, so its grain is one row per
+month/currency with completed activity. Months without activity are absent.
+
+The summary columns are `transaction_month` (DATE), `currency` (VARCHAR(3)),
+`transaction_count` (integer count), `debit_total`, `credit_total`, and
+`net_outflow` (NUMBER(38,2)). Net outflow is debit total minus credit total.
+
+With the current Snowflake target schema DBT_AOIFE, default dbt schema generation
+appends the configured suffixes. The unquoted Snowflake object names are:
+
+- `BANKING_ANALYTICS.DBT_AOIFE_STAGING.STG_TRANSACTIONS`
+- `BANKING_ANALYTICS.DBT_AOIFE_MARTS.MONTHLY_TRANSACTION_SUMMARY`
+
+Both are views under the existing project configuration. They do not build
+directly in RAW or the unsuffixed DBT_AOIFE schema. BANKING_DEVELOPER needs
+SELECT access to the raw table and permission to create the output schemas/views.
+Different profile target schemas produce different output names.
+
+There are 27 tests: required fields, unique transaction IDs, accepted category
+values, positive amounts, type/direction rules, training date boundaries,
+blank payment links, valid refund parent relationships and unique refund
+parents, unique month/currency groups, and monthly count/amount reconciliation.
+Singular SQL tests pass only when they return zero failing rows.
+
+Local offline dbt parsing and Snowflake-dialect SQL syntax checks passed with
+dbt Core 1.12.5 / dbt-snowflake 1.12.1. No database model or test has been run
+by the agent. CSV-based expected summary: six GBP months, 9,000 completed rows,
+GBP 2,012,092.38 debits, GBP 226,623.07 credits, GBP 1,785,469.31 net outflow.
+
+Run the targeted build yourself from the project root in zsh:
+
+```zsh
+(
+  read -rs 'DBT_ENV_SECRET_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE?Private key passphrase: '
+  printf '\n'
+  export DBT_ENV_SECRET_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE
+  uv run dbt build --project-dir dbt --profiles-dir "$HOME/.dbt" \
+    --target snowflake_dev --select +monthly_transaction_summary
+)
+```
+
+Enter the replacement key's passphrase; input stays hidden and the subshell
+discards the variable afterward. The leading `+` selects upstream dependencies
+as well as the summary, and their associated tests. This builds views and runs
+database tests; it never invokes the loader or alters raw transaction data.
+
+Archived models remain outside active paths. Their missing customer/account
+staging dependencies and historical activity/revenue calculation issues are
+still unfinished. The Postgres output is preserved, but these active models
+target Snowflake and should be built explicitly with `--target snowflake_dev`.
 
 ## Planned Snowflake migration
 
-The first proposed flow is a Snowflake raw transactions table, a declared dbt
-source, `stg_transactions` with explicit types and data tests, and a monthly
-summary of completed transactions with counts and debit/credit totals.
+The first flow now has a loaded raw table (user-reported), source declaration,
+transaction staging, monthly summary and tests. Its first targeted dbt build
+and database test results remain pending.
 Local dbt Core key-pair connection testing for `snowflake_dev` has passed
 (user-run). The raw-table definition and Python loader are implemented;
-their first live load is pending. Active dbt models/tests and a connection
-in the dbt browser UI still need implementation. The browser UI does not automatically load local
+the reported live load reconciles to the CSV. Further banking models and a
+connection in the dbt browser UI still need implementation. The browser UI does not automatically load local
 CSVs or execute this Postgres loader.
 
 `full_project.txt` is an ignored historical project dump containing duplicated

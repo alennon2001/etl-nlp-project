@@ -1,11 +1,17 @@
-This is the active dbt project for the planned Snowflake transaction flow.
+This is the active dbt project for the first Snowflake transaction flow.
 
 ### Current state
 
-No active models are implemented yet. The original starter examples and
+`banking_raw.transactions` → `stg_transactions` → `monthly_transaction_summary`
+is implemented, with 27 generic and singular data tests. Staging preserves
+transaction-attempt grain and all statuses; the summary uses completed rows
+at month/currency grain. Both models are views.
+
+The original starter examples and
 unfinished banking marts are preserved in `../archive/dbt/models/`, outside
-the configured resource paths. Do not run models until raw transactions,
-source declarations, staging and tests have been implemented.
+the configured resource paths. See the root README for the interactive
+targeted build command and exact schema names. Offline parsing and SQL syntax
+checks passed; database tests are pending the user-run build.
 
 
 ### Resources:
