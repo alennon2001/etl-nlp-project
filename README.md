@@ -52,8 +52,40 @@ its own connector dependencies; a Snowflake loader is still planned work.
    it does not append, validate business rules or define key constraints.
 4. `docker-compose.yml` defines Postgres 15 with a persistent `pgdata` volume.
    It does not execute Python or dbt.
-5. The dbt project in `dbt/` contains five banking mart models, configured as
-   views by default, plus the original starter models.
+5. The dbt project in `dbt/` is ready for new transaction models. Its five
+   unfinished banking marts and original starter models are preserved in
+   `archive/dbt/models/`, outside the active `dbt/models/` resource path.
+
+## Banking v2 transactions
+
+`scripts/generate_transactions_v2.py` is the current transaction generator.
+It uses the verified frozen accounts in `data_snapshots/banking-v1/` and does
+not regenerate customers, accounts or cards. The original four CSVs in
+`output/` and the snapshot remain unchanged.
+
+The exact generation command used from the project root was:
+
+```sh
+.venv/bin/python scripts/generate_transactions_v2.py
+```
+
+You can also use `uv run python scripts/generate_transactions_v2.py`.
+The script resolves data paths relative to the repository, validates before
+publication and refuses to overwrite an existing `output/banking-v2/` directory.
+Do not rerun it to inspect the already generated result.
+
+The ignored `output/banking-v2/` directory contains `transactions.csv` and
+`generation.json`, recording parameters and hashes. Validation confirmed
+10,000 unique transactions: 9,000 payments and 1,000 linked refund attempts,
+with exactly 9,000 completed, 700 pending and 300 failed overall. Dates cover
+April 21–September 30, 2026. All account/date, GBP, two-decimal positive amount,
+direction and refund relationship checks passed. A temporary regeneration
+produced the identical CSV hash without touching the versioned output.
+
+See [the dataset specification](docs/banking-v2-dataset.md) for the schema,
+training assumptions, status allocations and full verification results.
+The legacy Postgres loader still uses the original root-level CSVs; it does
+not load the v2 dataset.
 
 `scripts/etl_pipeline.py` is a separate retail-data cleaning example with local
 file paths. It is not part of the banking loader. NLP is not implemented.
@@ -104,10 +136,10 @@ initialized database.
 
 ## Known dbt gaps
 
-There are no raw source declarations or staging models. The banking marts
-reference missing `stg_customers`, `stg_accounts` and `stg_transactions` models,
-so their dependency graph is incomplete. No banking tests are defined; the
-only model tests cover the starter examples. dbt connection configuration is
+There are no active raw source declarations, staging models or banking tests.
+The archived banking marts reference missing `stg_customers`, `stg_accounts`
+and `stg_transactions` models. The archived starter examples retain their
+original tests. dbt connection configuration is
 separate from the Python loader and must be configured locally or in the dbt
 platform; local `profiles.yml` files are ignored.
 
@@ -121,8 +153,9 @@ the assumed 2% revenue calculation also need review.
 The first proposed flow is a Snowflake raw transactions table, a declared dbt
 source, `stg_transactions` with explicit types and data tests, and a monthly
 summary of completed transactions with counts and debit/credit totals.
-CSV loading into Snowflake and a Snowflake connection in the dbt browser UI
-still need implementation. The browser UI does not automatically load local
+Local dbt Core key-pair connection testing for `snowflake_dev` has passed
+(user-run). CSV loading into Snowflake, active dbt models/tests and a connection
+in the dbt browser UI still need implementation. The browser UI does not automatically load local
 CSVs or execute this Postgres loader.
 
 `full_project.txt` is an ignored historical project dump containing duplicated

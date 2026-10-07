@@ -44,6 +44,7 @@ secrets.yaml
 
 # Generated banking CSVs are excluded from the migration baseline
 /output/*.csv
+/output/banking-v2/
 
 # Immutable local training-data snapshots
 /data_snapshots/

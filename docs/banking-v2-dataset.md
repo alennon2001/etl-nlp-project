@@ -1,6 +1,7 @@
 # Banking v2 training dataset specification
 
-Status: design agreed; generator and v2 output are not yet implemented.
+Status: generator implemented; v2 CSV generated and validated locally.
+Snowflake loading and dbt transformations have not been performed.
 
 ## Frozen inputs
 
@@ -32,7 +33,7 @@ The frozen accounts CSV is the generator's authoritative parent input.
 - Retain the existing merchant categories: groceries, travel, utilities and
   entertainment. Their distribution is not a business requirement.
 
-## Planned CSV schema
+## CSV schema
 
 One row represents one payment or refund attempt. Column order:
 
@@ -49,7 +50,7 @@ One row represents one payment or refund attempt. Column order:
 | currency | GBP / VARCHAR(3) |
 | original_transaction_id | Blank for payments; parent UUID for refunds / VARCHAR(36) |
 
-## Planned generation and publication
+## Generation and publication
 
 Use one Python generator with fixed seed 1234, accounts sorted by account_id,
 explicit stable category ordering, and deterministic UUID5 transaction IDs
@@ -74,3 +75,48 @@ Also verify that payment parent links are blank and refund parent IDs are
 unique. Validate source account ID uniqueness before generation.
 
 No Snowflake loading or dbt model execution is part of generation.
+
+The implementation deliberately limits all payments to September 29 or
+earlier, and rejects every account opening on/after September 30. This keeps
+every completed payment date eligible for a later refund; it is stricter than
+filtering only refund parents. Supporting September 30 payment-only accounts
+would require relaxing that assumption and keeping eligibility filtering.
+
+## Verified local result
+
+Exact command run from the project root (Python 3.12.13):
+
+```sh
+.venv/bin/python scripts/generate_transactions_v2.py
+```
+
+The equivalent uv command is `uv run python scripts/generate_transactions_v2.py`.
+Both refuse to overwrite an existing `output/banking-v2/` directory; inspection
+and validation of an existing result should not invoke the generation entry point.
+
+Output files: `output/banking-v2/transactions.csv` and `generation.json`.
+The metadata records the generator hash/version, Python version, seed,
+parameters, frozen input hashes and output CSV hash. Both files are ignored.
+
+Verified on October 7, 2026:
+
+- 10,000 rows and unique UUID5 transaction IDs; 9,000 payments and 1,000 refunds.
+- Payment statuses: 8,100 completed, 630 pending, 270 failed.
+- Refund statuses: 900 completed, 70 pending, 30 failed.
+- Dates range from April 21 through September 30, covering all six months.
+- Every account reference/opening-date rule, GBP/direction rule and positive
+  two-decimal amount check passed. Observed amounts range from GBP 1.06 to 500.00.
+- All 1,000 refund parents are distinct completed payments with matching
+  account, category, currency and full amount, and strictly earlier dates.
+- Temporary regeneration, including reversed account mapping order, produced
+  the identical CSV SHA-256. Overwrite protection and rejection checks for
+  malformed rows, bad amounts, status totals and refund dates passed.
+- All four original CSVs still match the frozen snapshot hashes.
+
+CSV SHA-256:
+`119498f5d5fbc3dde9f3da8fee4e3b7e45e89ee0bd453a877d31cf62c68f0f74`.
+
+Remaining work: design the Snowflake raw table and controlled loading step,
+then implement source declarations, transaction staging, monthly summary and
+dbt data tests. The original incomplete dbt models are preserved in
+`archive/dbt/models/`, outside active resource paths.

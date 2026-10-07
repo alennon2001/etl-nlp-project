@@ -1,10 +1,11 @@
-Welcome to your new dbt project!
+This is the active dbt project for the planned Snowflake transaction flow.
 
-### Using the starter project
+### Current state
 
-Try running the following commands:
-- dbt run
-- dbt test
+No active models are implemented yet. The original starter examples and
+unfinished banking marts are preserved in `../archive/dbt/models/`, outside
+the configured resource paths. Do not run models until raw transactions,
+source declarations, staging and tests have been implemented.
 
 
 ### Resources:
