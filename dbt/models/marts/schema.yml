@@ -1,6 +1,72 @@
 version: 2
 
 models:
+  - name: monthly_transaction_summary_by_account_type
+    description: "Completed attempts at calendar month/currency/frozen account-type grain. Account types represent a snapshot, not historical attributes."
+    columns:
+      - name: transaction_month
+        data_tests: [not_null]
+      - name: currency
+        data_tests: [not_null]
+      - name: account_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['current', 'savings', 'credit']
+      - name: transaction_count
+        data_tests: [not_null]
+      - name: debit_total
+        data_tests: [not_null]
+      - name: credit_total
+        data_tests: [not_null]
+      - name: net_outflow
+        description: "Debit total minus credit total; positive means net customer outflow."
+        data_tests: [not_null]
+  - name: dim_accounts
+    description: "One row per frozen account snapshot, including accounts without transactions. No attribute history or synthetic balance."
+    columns:
+      - name: account_id
+        description: "Natural account key; joins to fct_transactions.account_id."
+        data_tests: [unique, not_null]
+      - name: customer_id
+        description: "Customer reference; may repeat across accounts."
+      - name: account_type
+        description: "Frozen snapshot category, not historically effective account type."
+      - name: spend_profile
+        description: "Synthetic generation label, not measured spending."
+      - name: opened_at
+        description: "Opening instant; retains staging TIMESTAMP_TZ type."
+      - name: opened_date
+        description: "UTC opening date from staging."
+  - name: fct_transactions
+    description: "One row per payment or refund attempt; retains all ten staging fields and all statuses without joins or aggregation."
+    columns:
+      - name: transaction_id
+        data_tests: [unique, not_null]
+      - name: account_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_accounts')
+                field: account_id
+      - name: transaction_type
+        description: "payment or refund; vocabulary checked upstream."
+      - name: merchant_category
+        description: "Unchanged staging merchant category."
+      - name: amount
+        description: "Positive magnitude; retains staging NUMBER(18,2) precision."
+      - name: direction
+        description: "Customer-account perspective: payment debit, refund credit."
+      - name: transaction_date
+        description: "Attempt date, including the refund's own date."
+      - name: status
+        description: "Preserves completed, pending and failed; financial reporting must filter completed."
+      - name: currency
+        description: "Unchanged source currency; GBP in v2."
+      - name: original_transaction_id
+        description: "NULL for payments; parent payment UUID for refunds. Integrity checked upstream."
   - name: monthly_transaction_summary
     description: "One row per calendar month/currency, completed transactions only."
     columns:

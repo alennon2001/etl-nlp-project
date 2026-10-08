@@ -2,10 +2,26 @@ version: 2
 
 sources:
   - name: banking_raw
-    description: "Validated banking-v2 training transactions loaded separately from dbt."
+    description: "Validated frozen accounts and banking-v2 transactions loaded separately from dbt."
     database: BANKING_ANALYTICS
     schema: RAW
     tables:
+      - name: accounts
+        identifier: ACCOUNTS
+        description: "One row per frozen account. Raw synthetic balance text is not a ledger measure."
+        columns:
+          - name: account_id
+            data_tests: [unique, not_null]
+          - name: customer_id
+            data_tests: [not_null]
+          - name: account_type
+            data_tests: [not_null]
+          - name: spend_profile
+            data_tests: [not_null]
+          - name: balance
+            data_tests: [not_null]
+          - name: opened_at
+            data_tests: [not_null]
       - name: transactions
         identifier: TRANSACTIONS
         description: "One row per payment or refund attempt, including every status."
