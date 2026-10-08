@@ -32,6 +32,16 @@ EXPECTED_TYPES = (
     "VARCHAR(3)", "VARCHAR(36)",
 )
 
+# Historical generation.json recorded all four v1 snapshot files even though
+# only accounts were consumed. Accept only this exact historical provenance,
+# without requiring unrelated ignored CSVs or rewriting existing metadata.
+LEGACY_INPUT_SHA256 = {
+    "customers.csv": "c06aededd84cacaea8de6ea95cb66eb0c602a1485c14c8351130c9bb5f2d8e8c",
+    "accounts.csv": "77978fdca0ff97e336e090f549e96d1e00158f1d266253406df5e414afbdeb12",
+    "cards.csv": "3670468de4d60f7f365cbbbaa1fd11a8db9f29ac9d8dc82fbed428e268739a04",
+    "transactions.csv": "b7007423620c71c0e4c3605c6b9e9491d4dc4c4453ec459194fef5ecba18f4c3",
+}
+
 
 class LoadError(Exception):
     """A deliberately safe, actionable error message without secret values."""
@@ -43,7 +53,11 @@ def read_validated_input(input_dir=OUTPUT_DIR):
     metadata = json.loads((input_dir / "generation.json").read_text())
     if metadata.get("dataset_version") != DATASET_VERSION:
         raise LoadError("Input metadata is not the agreed banking-v2 dataset.")
-    if metadata.get("input_sha256") != hashes:
+    input_hashes = metadata.get("input_sha256")
+    current_inputs = input_hashes == hashes
+    legacy_inputs = (input_hashes == LEGACY_INPUT_SHA256
+                     and hashes == {"accounts.csv": LEGACY_INPUT_SHA256["accounts.csv"]})
+    if not (current_inputs or legacy_inputs):
         raise LoadError("Input metadata does not match the verified frozen snapshot.")
     if metadata.get("output_sha256") != hashlib.sha256(raw).hexdigest():
         raise LoadError("CSV SHA-256 does not match generation.json; nothing loaded.")

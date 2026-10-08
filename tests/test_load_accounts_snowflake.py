@@ -113,13 +113,13 @@ class AccountsTests(unittest.TestCase):
     def test_hash_and_header_rejection(self):
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp)
-            manifest = (loader.SNAPSHOT_DIR / 'SHA256SUMS').read_text()
+            manifest = (loader.FIXTURE_DIR / 'SHA256SUMS').read_text()
             (target / 'SHA256SUMS').write_text(manifest)
             (target / 'accounts.csv').write_bytes(b'changed')
             with self.assertRaisesRegex(loader.LoadError, 'SHA-256'):
                 loader.read_validated_input(target)
             raw = b'wrong,header\n'
-            old = loader.read_manifest(loader.SNAPSHOT_DIR)['accounts.csv']
+            old = loader.read_manifest(loader.FIXTURE_DIR)['accounts.csv']
             (target / 'accounts.csv').write_bytes(raw)
             (target / 'SHA256SUMS').write_text(manifest.replace(old, hashlib.sha256(raw).hexdigest()))
             with self.assertRaisesRegex(loader.LoadError, 'header'):

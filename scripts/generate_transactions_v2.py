@@ -16,10 +16,10 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SNAPSHOT_DIR = PROJECT_ROOT / "data_snapshots" / "banking-v1"
+FIXTURE_DIR = PROJECT_ROOT / "fixtures" / "banking-v2"
 OUTPUT_DIR = PROJECT_ROOT / "output" / "banking-v2"
 DATASET_VERSION = "banking-v2"
-GENERATOR_VERSION = "1"
+GENERATOR_VERSION = "2"  # Input packaging changed; transaction algorithm is unchanged.
 SEED = 1234
 START_DATE = date(2026, 4, 21)
 END_DATE = date(2026, 9, 30)
@@ -42,17 +42,16 @@ def require(condition, message):
         raise ValueError(message)
 
 
-def read_manifest(snapshot_dir):
+def read_manifest(fixture_dir):
     hashes = {}
-    for line in (snapshot_dir / "SHA256SUMS").read_text().splitlines():
+    for line in (fixture_dir / "SHA256SUMS").read_text().splitlines():
         match = re.fullmatch(r"([0-9a-f]{64})  ([\w.-]+\.csv)", line)
         require(match is not None, "Invalid SHA256SUMS entry")
         digest, name = match.groups()
         require(name not in hashes, "Duplicate SHA256SUMS entry")
         hashes[name] = digest
-    require(set(hashes) == {
-        "customers.csv", "accounts.csv", "cards.csv", "transactions.csv"
-    }, "Snapshot manifest must list all four CSVs")
+    require(set(hashes) == {"accounts.csv"},
+            "Fixture manifest must list only the required accounts.csv")
     return hashes
 
 
@@ -68,14 +67,14 @@ def parse_opening_date(value):
     return opened.astimezone(timezone.utc).date()
 
 
-def read_and_validate_accounts(snapshot_dir=SNAPSHOT_DIR):
+def read_and_validate_accounts(fixture_dir=FIXTURE_DIR):
     """Verify frozen bytes before parsing and return accounts in stable order."""
-    hashes = read_manifest(snapshot_dir)
+    hashes = read_manifest(fixture_dir)
     accounts_bytes = None
     for name, expected in hashes.items():
-        data = (snapshot_dir / name).read_bytes()
+        data = (fixture_dir / name).read_bytes()
         require(hashlib.sha256(data).hexdigest() == expected,
-                f"Snapshot SHA-256 mismatch: {name}")
+                f"Fixture SHA-256 mismatch: {name}")
         if name == "accounts.csv":
             accounts_bytes = data
 

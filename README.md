@@ -1,7 +1,11 @@
 # ETL + NLP Project
 
-This repository contains a partly implemented local banking analytics pipeline.
-Snowflake migration is planned work; the current loader targets Postgres.
+This repository contains a synthetic banking pipeline with validated Snowflake
+loaders, dbt models and saved analyses. The legacy Postgres flow remains separate.
+
+Start with [fresh-clone banking setup](docs/fresh-clone-banking.md). The required
+synthetic accounts fixture is version-controlled; ignored historical snapshots
+are not needed to reproduce banking-v2 transactions.
 
 The three saved banking queries and user-supplied Snowflake results are
 documented in [banking analysis findings](docs/banking-analysis-findings.md).
@@ -66,7 +70,7 @@ both are declared dependencies resolved together with dbt-snowflake.
 ## Banking v2 transactions
 
 `scripts/generate_transactions_v2.py` is the current transaction generator.
-It uses the verified frozen accounts in `data_snapshots/banking-v1/` and does
+It uses the verified frozen accounts in `fixtures/banking-v2/` and does
 not regenerate customers, accounts or cards. The original four CSVs in
 `output/` and the snapshot remain unchanged.
 
@@ -107,7 +111,7 @@ First validate locally, without any connection or passphrase prompt:
 uv run python scripts/load_transactions_snowflake.py --validate-only
 ```
 
-It verifies all frozen snapshot hashes, the v2 CSV hash and input provenance
+It verifies the required account fixture hash, the v2 CSV hash and input provenance
 in `generation.json`, the exact ten-column header and every dataset rule.
 The same validation runs automatically before an actual load.
 
