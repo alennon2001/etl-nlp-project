@@ -1,13 +1,43 @@
 version: 2
 
 models:
+  - name: stg_accounts
+    description: "One row per frozen account; no filtering, deduplication or synthetic balance."
+    columns:
+      - name: account_id
+        data_tests: [unique, not_null]
+      - name: customer_id
+        data_tests: [not_null]
+      - name: account_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['current', 'savings', 'credit']
+      - name: spend_profile
+        description: "Synthetic generation label, not measured spending."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['low_spender', 'normal', 'high_spender']
+      - name: opened_at
+        data_tests: [not_null]
+      - name: opened_date
+        description: "UTC opening date, independent of session timezone."
+        data_tests: [not_null]
   - name: stg_transactions
     description: "One row per transaction attempt; preserves pending and failed records."
     columns:
       - name: transaction_id
         data_tests: [unique, not_null]
       - name: account_id
-        data_tests: [not_null]
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_accounts')
+                field: account_id
       - name: transaction_type
         data_tests:
           - not_null

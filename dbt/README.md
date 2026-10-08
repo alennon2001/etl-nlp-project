@@ -1,5 +1,10 @@
 This is the active dbt project for the first Snowflake transaction flow.
 
+Frozen accounts ingestion and `stg_accounts` are now implemented alongside
+the transaction flow. See [accounts setup and execution](../docs/accounts-ingestion.md)
+for raw DDL, the validated loader, and the targeted staging build. Account
+dimensions and transaction facts remain deferred.
+
 ### Current state
 
 `banking_raw.transactions` → `stg_transactions` → `monthly_transaction_summary`
