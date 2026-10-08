@@ -3,6 +3,11 @@
 This repository contains a partly implemented local banking analytics pipeline.
 Snowflake migration is planned work; the current loader targets Postgres.
 
+The three saved banking queries and user-supplied Snowflake results are
+documented in [banking analysis findings](docs/banking-analysis-findings.md).
+Queries in `dbt/analyses/` use `ref()` and are saved analyses, not additional
+models automatically built or executed by `dbt build`.
+
 ## Project Python environment
 
 Use uv from the project root to recreate the shared ingestion/dbt environment:
