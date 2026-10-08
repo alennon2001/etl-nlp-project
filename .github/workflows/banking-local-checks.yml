@@ -51,5 +51,8 @@ jobs:
       - name: Run local tests including exact CSV reproduction
         run: uv run --locked python -m unittest discover -s tests -v
 
+      - name: Demonstrate transaction insert, update and replay in temporary storage
+        run: uv run --locked python scripts/generate_transaction_batch.py
+
       - name: Confirm tracked files remain unchanged
         run: git diff --exit-code

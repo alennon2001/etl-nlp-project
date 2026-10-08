@@ -1,7 +1,9 @@
 # Second transaction batch: local learning design
 
-Status: design only. The generator, replay engine and database loading path
-described below are not yet implemented.
+Status: local generator, copy-on-write state engine, replay tests and exact
+reconciliation are implemented. Database loading remains future work.
+The original banking-v2 generator, strict validator and Snowflake loaders are
+unchanged. This exercise does not update any warehouse or baseline dbt model.
 
 ## Goal
 
@@ -66,7 +68,7 @@ might provide a different ordering field or no such guarantee.
 
 ## Files and integrity
 
-Proposed new code: scripts/generate_transaction_batch.py and
+Implemented code: scripts/generate_transaction_batch.py and
 scripts/transaction_batch_state.py, with tests/test_transaction_batches.py.
 
 Keep any generated delivery under a new ignored output directory, separate
@@ -146,3 +148,131 @@ separate explicit step.
 October event dates, partial refunds, account attribute history, new customers,
 deletions, payment reversals, schema evolution, S3, APIs and scheduling.
 These can be added once insert/update/replay semantics are understood.
+
+## Implemented local interface
+
+Run the temporary demonstration from the project root after the original v2
+output has been generated:
+
+```sh
+uv run --locked python scripts/generate_transaction_batch.py
+uv run --locked python -m unittest discover -s tests -v
+```
+
+The default demonstration creates and removes a TemporaryDirectory. An optional
+`--output-dir` may retain a delivery in a **new** directory, for example beneath
+ignored output/transaction-batches/. Existing directories are refused. All
+tests use temporary storage. No new code imports Snowflake, either loader,
+credentials or profile handling. CI runs discovery of all tests and the
+temporary demonstration after generating/validating the original baseline.
+CI itself has not been remotely executed by the agent.
+
+`baseline_state()` verifies the canonical baseline CSV hash and account fixture
+manifest, then calls the unchanged strict validate_dataset() on exactly
+10,000 original rows. It assigns the simulation watermark/version in memory.
+The 10,100-row resulting state is separate: the baseline validator still
+rejects it. Baseline generation metadata and all input/output files stay intact.
+
+`generate_delivery(state)` creates UUID5 IDs in the separate namespace
+`etl-nlp-project/transaction-batches`, with names
+`banking-batch-002:payment:1` through `:100`. Random draws use seed 1234, sorted
+accounts and the existing category order. It then copies the first 20 pending
+payments sorted by transaction_id, changing only status and source metadata.
+
+The JSON envelope contains the batch_id, baseline and accounts hashes,
+generator_version, seed, record count and source-version counts, records with
+all ten unchanged business field names plus source_version/source_updated_at,
+and content_sha256. Batch identity is shared envelope metadata rather than
+repeated in each record. New amounts remain two-decimal strings generated from
+integer pence. The content hash covers the entire canonical JSON envelope
+excluding only content_sha256, so identity, provenance, counts and source
+metadata are bound to the records. A SHA256SUMS beside delivery.json additionally
+verifies its exact formatted file bytes before JSON parsing. Hashes detect
+changes; they are not cryptographic authentication of a remote sender.
+
+`apply_delivery(state, delivery)` returns a separate LocalState and result.
+Complete envelope/field validation occurs first. Transition checks then apply
+to a deep copy; even a conflict in the last record after earlier valid changes
+cannot mutate the original records or ledger. Callers publish both together
+by accepting the returned state only after success. The successful ledger
+entry includes content hash and inserted/updated/unchanged/stale counts.
+There is no on-disk state persistence, lock, database transaction or concurrent
+writer guarantee. Delivery files are exclusively created, not a durable
+transactional database ledger.
+
+The reusable engine accepts smaller nonempty deliveries for replay/stale/error
+exercises. Only generation of batch 002 enforces the exact 100/20 allocation.
+It rejects non-payment deliveries, malformed business fields, unknown accounts,
+event dates outside the existing inclusive window/account opening date,
+invalid source versions and non-UTC/noncanonical source timestamp text.
+New IDs must be version 1 completed September 30 payments. Existing IDs may
+advance exactly one version only from pending to completed, with every other
+business field unchanged and a later source timestamp. An older source version
+is counted as stale and ignored, not allowed to reverse completion.
+
+## One insert, one update and one replay
+
+The first new record is transaction
+`7775aae3-354a-5e6f-84dd-df8fb2c02b50`, a GBP 77.57 completed debit/payment
+dated September 30, 2026. It is absent from baseline, has source_version 1,
+and is delivered at October 1, 2026 00:00 UTC. Application adds one record.
+
+The first selected update is transaction
+`0042e9e4-c28c-510c-890a-c9c8819e76d4`, a GBP 335.91 payment dated July 19,
+2026. Baseline has pending/source_version 1; delivery has completed/version 2
+with the fixed October 1 timestamp. Amount, account, event date and all other
+business fields remain the same. Application replaces its version, adding
+no transaction ID; July completed reporting gains the payment amount.
+
+After application, reapplying banking-batch-002 with verified content hash
+`f33609b651742ef5e4533d8077fec02e0c79823226b2eccb5b307d4ba701df55`
+returns already_applied=true and the original ledger counts, not new inserts
+or updates. Records and the one ledger entry are unchanged. The stored
+100-insert/20-update counts describe the original application. Re-sealing the
+same 120 records under banking-batch-003 exercises row-level replay: 120
+unchanged records, zero inserts/updates/stale records, and one new ledger entry.
+Reusing batch 002 with a different verified hash is rejected.
+
+## Verified before/after results
+
+All 32 local tests passed, including 12 batch tests. Checks cover deterministic
+file bytes, sorted update selection, collisions, inserts/updates, both replay
+levels, stale records, equal-version conflicts, version gaps and unsupported
+transitions, malformed fields/provenance/hashes/counts, duplicate transaction
+IDs, file tampering, overwrite refusal and atomic failure after valid records.
+Original fixture, manifest, baseline CSV and generation metadata bytes are
+checked unchanged, and the strict baseline validation is rerun.
+
+The 100 new amounts total **GBP 22,263.96**. The 20 pending payments newly
+completed total **GBP 4,010.75**. Consequently completed debit and net-outflow
+totals each rise by exactly **GBP 26,274.71**. Pending debit amounts decrease
+by GBP 4,010.75; all-attempt amounts increase only by GBP 22,263.96. Status
+changes do not create a second financial record.
+
+| Completed measure | Before | After |
+| --- | ---: | ---: |
+| Transaction count | 9,000 | 9,120 |
+| Debit total (GBP) | 2,012,092.38 | 2,038,367.09 |
+| Credit total (GBP) | 226,623.07 | 226,623.07 |
+| Net outflow (GBP) | 1,785,469.31 | 1,811,744.02 |
+
+Fresh completed-only aggregation of final state gives:
+
+| Month (2026), GBP | Before count | After count | After debits | After credits | Before net outflow | After net outflow |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| April | 472 | 474 | 110,961.17 | 418.17 | 110,502.33 | 110,543.00 |
+| May | 1,585 | 1,589 | 387,560.74 | 7,330.00 | 378,967.22 | 380,230.74 |
+| June | 1,575 | 1,579 | 376,891.71 | 18,134.39 | 357,993.97 | 358,757.32 |
+| July | 1,728 | 1,730 | 399,031.99 | 36,690.20 | 361,989.24 | 362,341.79 |
+| August | 1,726 | 1,729 | 380,593.98 | 49,872.98 | 330,301.80 | 330,721.00 |
+| September | 1,914 | 2,019 | 383,327.50 | 114,177.33 | 245,714.75 | 269,150.17 |
+
+All amount arithmetic uses Decimal, not floats. reconcile_exercise() asserts
+status/unique-row counts, exact amounts by status/direction, unchanged credits
+and incremental per-month deltas against a fresh final-state summary. Tests
+also independently re-aggregate final rows and reconcile every month and
+currency group. These are locally executed simulation results, not Snowflake
+query results or proof of any database application.
+
+Future database work still requires an explicitly authorized isolated target,
+schema/audit design, durable ledger, concurrency strategy and recovery tests.
