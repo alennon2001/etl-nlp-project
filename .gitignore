@@ -45,6 +45,7 @@ secrets.yaml
 # Generated banking CSVs are excluded from the migration baseline
 /output/*.csv
 /output/banking-v2/
+/output/transaction-batches/
 
 # Historical local snapshots stay ignored; fixtures/banking-v2 is tracked.
 /data_snapshots/
