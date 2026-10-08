@@ -46,5 +46,5 @@ secrets.yaml
 /output/*.csv
 /output/banking-v2/
 
-# Immutable local training-data snapshots
+# Historical local snapshots stay ignored; fixtures/banking-v2 is tracked.
 /data_snapshots/

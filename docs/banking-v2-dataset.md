@@ -5,12 +5,20 @@ Snowflake loading and dbt transformations have not been performed.
 
 ## Frozen inputs
 
-Preserve all four existing CSVs together in the ignored
-`data_snapshots/banking-v1/` directory. `SHA256SUMS` records their byte-level
-SHA-256 hashes. Never overwrite an existing snapshot: verify all four files
-against the manifest instead. Source CSVs in `output/` remain untouched.
-Customers, accounts and cards will retain their existing records and IDs.
-The frozen accounts CSV is the generator's authoritative parent input.
+The authoritative parent input is now `fixtures/banking-v2/accounts.csv`,
+an exact copy of the historical frozen synthetic accounts. Its version-controlled
+SHA256SUMS covers the sole input consumed by generation and accounts ingestion.
+Customers, cards and old v1 transactions are not runtime dependencies and are
+not distributed. The historical four-file snapshot in ignored
+`data_snapshots/banking-v1/` and source CSVs in output/ remain untouched.
+See the [fixture provenance](../fixtures/banking-v2/README.md) and
+[fresh-clone setup](fresh-clone-banking.md). Never regenerate parent accounts
+or overwrite frozen inputs to recreate v2.
+
+Generator version 2 changes input packaging/metadata only. Transaction IDs,
+RNG sequence, amounts and business rules remain unchanged. New metadata has
+one account input hash; the loader also accepts the exact pinned historical
+four-hash metadata so existing generated outputs need not be rewritten.
 
 ## Training assumptions
 

@@ -1,5 +1,10 @@
 # Account and transaction model design
 
+Current reproducible input: `fixtures/banking-v2/accounts.csv`, an exact byte
+copy of the historical snapshot inspected below. See
+[fresh-clone setup](fresh-clone-banking.md); the historical ignored snapshot
+is no longer a runtime dependency.
+
 ## What one account represents
 
 One frozen account row represents one synthetic bank account, identified by

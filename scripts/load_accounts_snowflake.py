@@ -15,7 +15,7 @@ import warnings
 
 import snowflake.connector
 
-from generate_transactions_v2 import SNAPSHOT_DIR, read_manifest
+from generate_transactions_v2 import FIXTURE_DIR, read_manifest
 from load_transactions_snowflake import LoadError, ROLE, read_connection_settings
 
 TARGET = "BANKING_ANALYTICS.RAW.ACCOUNTS"
@@ -68,9 +68,9 @@ def validate_rows(rows):
             raise LoadError("Opening timestamp must use the frozen explicit UTC format.")
 
 
-def read_validated_input(snapshot_dir=SNAPSHOT_DIR):
-    expected = read_manifest(snapshot_dir)["accounts.csv"]
-    raw = (snapshot_dir / "accounts.csv").read_bytes()
+def read_validated_input(fixture_dir=FIXTURE_DIR):
+    expected = read_manifest(fixture_dir)["accounts.csv"]
+    raw = (fixture_dir / "accounts.csv").read_bytes()
     if hashlib.sha256(raw).hexdigest() != expected:
         raise LoadError("Frozen accounts SHA-256 mismatch; nothing loaded.")
     reader = csv.DictReader(io.StringIO(raw.decode("utf-8-sig")))

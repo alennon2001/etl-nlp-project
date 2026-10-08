@@ -24,7 +24,7 @@ deduplication, or customer enrichment occurs. Spend profile is synthetic.
 
 ## Loader safeguards
 
-`scripts/load_accounts_snowflake.py` reads only the frozen accounts CSV and
+`scripts/load_accounts_snowflake.py` reads only `fixtures/banking-v2/accounts.csv` and
 its manifest, verifies SHA-256 before parsing, and requires 2,000 rows with
 unique canonical account UUIDs, canonical customer UUIDs, all six fields,
 known categories, a finite numeric balance within the source generation

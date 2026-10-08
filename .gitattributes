@@ -1,0 +1,2 @@
+# Immutable fixture checksums require exact bytes on every Git checkout.
+/fixtures/banking-v2/accounts.csv -text
