@@ -1,190 +1,275 @@
-# ETL + NLP Project
+# Synthetic Banking Analytics with Snowflake and dbt
 
-This repository contains a synthetic banking pipeline with validated Snowflake
-loaders, dbt models and saved analyses. The legacy Postgres flow remains separate.
+A reproducible learning and portfolio project that generates synthetic payment
+and refund data, validates and loads it into Snowflake, and uses dbt to build
+account and transaction models with reconciled monthly reporting.
 
-Start with [fresh-clone banking setup](docs/fresh-clone-banking.md). The required
-synthetic accounts fixture is version-controlled; ignored historical snapshots
-are not needed to reproduce banking-v2 transactions.
+**Business questions:** How much completed net outflow occurred each month?
+How does it differ by account type and active-account count? Which accounts
+have no completed transactions?
 
-The three saved banking queries and user-supplied Snowflake results are
-documented in [banking analysis findings](docs/banking-analysis-findings.md).
-Queries in `dbt/analyses/` use `ref()` and are saved analyses, not additional
-models automatically built or executed by `dbt build`.
+Start with [fresh-clone setup](docs/fresh-clone-banking.md) or explore the
+[saved analyses and findings](docs/banking-analysis-findings.md).
+The repository retains its original `etl-nlp-project` name; NLP is not implemented.
 
-## Project Python environment
+## Active pipeline
 
-Use uv from the project root to recreate the shared ingestion/dbt environment:
+1. A version-controlled synthetic accounts fixture supplies 2,000 accounts.
+2. Python generates 10,000 deterministic payment/refund attempts as a local CSV.
+3. Separate Python loaders validate inputs and load two Snowflake raw tables.
+4. dbt creates two staging views, an account dimension, a transaction fact and
+   two monthly summary views.
+5. dbt tests validate keys, relationships, business rules and reconciliation.
+   Saved analysis queries explore the resulting models.
+
+```mermaid
+flowchart TD
+    A["Frozen accounts fixture"] --> B["Accounts loader"]
+    A --> C["Transaction generator"]
+    C --> D["Transaction CSV and metadata"]
+    D --> E["Transaction loader"]
+    B --> F["RAW.ACCOUNTS"]
+    E --> G["RAW.TRANSACTIONS"]
+    F --> H["stg_accounts"]
+    G --> I["stg_transactions"]
+    H --> J["dim_accounts"]
+    I --> K["fct_transactions"]
+    I --> L["Monthly summary"]
+    J --> M["Monthly summary by account type"]
+    K --> M
+    L -. "Reconciliation" .-> M
+```
+
+Docker and Postgres are part of the separate legacy example, not this flow.
+dbt runs locally through `uv` and sends SQL to Snowflake; it does not upload CSVs.
+
+## Models and grain
+
+Grain means what one row represents. All six active dbt models are **views**.
+
+| Model | Grain | Responsibility |
+| --- | --- | --- |
+| `stg_accounts` | One frozen account | Explicit types, UTC opening timestamp/date; excludes synthetic balance |
+| `stg_transactions` | One transaction attempt | Types all ten fields; normalises blank parent IDs; retains all statuses |
+| `dim_accounts` | One frozen account | Descriptive account attributes, including accounts without transactions |
+| `fct_transactions` | One transaction attempt | Preserves amounts, dates, status and account/refund references |
+| `monthly_transaction_summary` | Month and currency | Completed counts, debits, credits and net outflow |
+| `monthly_transaction_summary_by_account_type` | Month, currency and account type | Same measures split by the account snapshot's type |
+
+`source()` identifies existing raw tables; `ref()` identifies dbt models and
+records dependencies. The overall monthly summary reads transaction staging
+directly and remains the reconciliation baseline for the account-type summary.
+
+With target schema `DBT_AOIFE`, models are created in
+`BANKING_ANALYTICS.DBT_AOIFE_STAGING` and
+`BANKING_ANALYTICS.DBT_AOIFE_MARTS`. A different target schema changes those
+suffix-prefixed output schemas. Raw tables remain in `BANKING_ANALYTICS.RAW`.
+
+See [model design](docs/account-transaction-model-design.md),
+[dimension/fact details](docs/account-transaction-marts.md) and
+[account-type reporting](docs/monthly-account-type-summary.md).
+
+## Reproduce locally without Snowflake
+
+Install Git and uv, then run from a fresh clone:
 
 ```sh
+git clone https://github.com/alennon2001/etl-nlp-project.git
+cd etl-nlp-project
 uv sync --locked
-```
-
-`uv sync` creates or synchronizes `.venv`. The `--locked` option requires the
-committed lockfile to agree with the dependency manifest rather than changing
-dependency resolution. `.python-version` selects Python 3.12.13;
-`pyproject.toml` constrains the project to Python 3.12 and declares
-dbt-snowflake, pandas, SQLAlchemy and psycopg2-binary. `uv.lock` records their
-resolved versions and transitive dependencies. This is a scripts/dbt project:
-uv does not build or install the repository itself as a Python package.
-
-Use `uv run` to execute commands in this environment without activating it:
-
-```sh
-uv run python --version
-uv run dbt --version
-```
-
-For dbt model commands, change into `dbt/` first; uv can locate the parent
-project environment. Model execution still requires separate connection
-configuration. The first transaction flow is implemented; database build
-and test results remain pending execution.
-
-In VS Code, open the project folder, run **Python: Select Interpreter** from
-the Command Palette, choose **Enter interpreter path**, and select
-`.venv/bin/python` inside this project. Selecting that interpreter does not
-automatically export credentials from `.env`; use the explicit environment
-setup below for terminal ingestion commands.
-
-The Snowflake loader directly imports `snowflake-connector-python` and PyYAML;
-both are declared dependencies resolved together with dbt-snowflake.
-
-## Current pipeline
-
-1. Spoof configurations in `configs/`, grouped by
-   `bundles/banking_bundle.json`, describe synthetic customers, accounts, cards
-   and transactions. Customers must exist before accounts; accounts must exist
-   before cards and transactions.
-2. Generated CSVs live in `output/`. They are local generated artifacts and are
-   excluded from the migration baseline.
-3. `scripts/load_csvs.py` reads those four CSVs with pandas and writes them to
-   Postgres using SQLAlchemy. Each load replaces the corresponding table;
-   it does not append, validate business rules or define key constraints.
-4. `docker-compose.yml` defines Postgres 15 with a persistent `pgdata` volume.
-   It does not execute Python or dbt.
-5. The dbt project in `dbt/` implements raw transactions → transaction staging
-   → completed monthly summary. Its five
-   unfinished banking marts and original starter models are preserved in
-   `archive/dbt/models/`, outside the active `dbt/models/` resource path.
-
-## Banking v2 transactions
-
-`scripts/generate_transactions_v2.py` is the current transaction generator.
-It uses the verified frozen accounts in `fixtures/banking-v2/` and does
-not regenerate customers, accounts or cards. The original four CSVs in
-`output/` and the snapshot remain unchanged.
-
-The exact generation command used from the project root was:
-
-```sh
-.venv/bin/python scripts/generate_transactions_v2.py
-```
-
-You can also use `uv run python scripts/generate_transactions_v2.py`.
-The script resolves data paths relative to the repository, validates before
-publication and refuses to overwrite an existing `output/banking-v2/` directory.
-Do not rerun it to inspect the already generated result.
-
-The ignored `output/banking-v2/` directory contains `transactions.csv` and
-`generation.json`, recording parameters and hashes. Validation confirmed
-10,000 unique transactions: 9,000 payments and 1,000 linked refund attempts,
-with exactly 9,000 completed, 700 pending and 300 failed overall. Dates cover
-April 21–September 30, 2026. All account/date, GBP, two-decimal positive amount,
-direction and refund relationship checks passed. A temporary regeneration
-produced the identical CSV hash without touching the versioned output.
-
-See [the dataset specification](docs/banking-v2-dataset.md) for the schema,
-training assumptions, status allocations and full verification results.
-The legacy Postgres loader still uses the original root-level CSVs; it does
-not load the v2 dataset.
-
-## First Snowflake transaction load
-
-The loader is implemented and locally checked. The user reports a successful
-Snowflake load of 10,000 rows with 10,000 distinct IDs and April 21–September 30
-dates. All six reported grouped counts and exact amount totals match the CSV.
-Its only data target is `BANKING_ANALYTICS.RAW.TRANSACTIONS`.
-
-First validate locally, without any connection or passphrase prompt:
-
-```sh
+uv run python scripts/generate_transactions_v2.py
+uv run python scripts/load_accounts_snowflake.py --validate-only
 uv run python scripts/load_transactions_snowflake.py --validate-only
-```
-
-It verifies the required account fixture hash, the v2 CSV hash and input provenance
-in `generation.json`, the exact ten-column header and every dataset rule.
-The same validation runs automatically before an actual load.
-
-Next execute `sql/snowflake/02_raw_transactions.sql` yourself in a Snowflake
-worksheet. It uses `BANKING_DEVELOPER` and `BANKING_DEV_WH`, creates the RAW
-schema/table only if absent, and never replaces or clears an existing table.
-It requires the appropriate schema/table creation privileges. Creation is
-separate because Snowflake DDL implicitly commits transactions; the Python
-insert transaction contains no DDL. An incompatible existing table makes the
-loader stop rather than changing its structure.
-
-From the repository root, run the interactive load:
-
-```sh
-uv run python scripts/load_transactions_snowflake.py
-```
-
-The script reads only `etl_project.outputs.snowflake_dev` from the local
-`~/.dbt/profiles.yml`, preserving that file and the Postgres output. It uses
-the established account/login/key path and requires `BANKING_DEVELOPER`,
-`BANKING_DEV_WH` and `BANKING_ANALYTICS`. It sets the loading schema to RAW
-without changing dbt's configured DBT_AOIFE schema. An encrypted-key passphrase
-is requested privately using a terminal prompt, never placed in Git, logged,
-or read from the dbt passphrase environment variable. Use the replacement
-key's passphrase. If hidden input is unavailable, the script stops.
-
-IDs remain strings, amounts use Python `Decimal`, dates are explicitly parsed,
-and blank payment `original_transaction_id` values become SQL NULL.
-The loader checks target column names/order/types and refuses a nonempty
-table. It then inserts 500-row parameterized batches with autocommit disabled.
-Before committing, it compares row count, unique transaction count, and exact
-amount sums plus counts grouped by currency, transaction type, direction and
-status. An insert or reconciliation failure triggers rollback; the connection
-is closed afterward. Library error text is withheld to avoid exposing secrets;
-Snowflake error codes and the failure phase provide diagnostic context.
-
-Run only one loader at a time and avoid other writers during the load. An
-empty-table precheck is not a concurrency lock. A successful rerun stops
-because the table contains data: there is no automatic append, truncate or
-replacement. If connection loss prevents confirming a commit/rollback,
-inspect the target in Snowflake before retrying; do not assume it is empty.
-
-Local checks completed: validation of the actual 10,000-row CSV, eight tests
-using fake connections for transaction/reconciliation and hash protections,
-and `uv pip check`. These do not establish live permissions or successful
-loading. To repeat the tests without contacting Snowflake:
-
-```sh
 uv run python -m unittest discover -s tests -v
 ```
 
-`scripts/etl_pipeline.py` is a separate retail-data cleaning example with local
-file paths. It is not part of the banking loader. NLP is not implemented.
+`.python-version` pins Python 3.12.13. `pyproject.toml` declares dependencies
+and `uv.lock` records resolved versions. `uv sync --locked` recreates the
+ignored `.venv`; `uv run` uses it without manual activation.
 
-## Local credentials
+Generation creates ignored `output/banking-v2/transactions.csv` and
+`generation.json`. It refuses to overwrite an existing output directory.
+On an existing checkout, validate the current output; do not delete it just
+to repeat setup. The reproduction test generates in temporary storage.
 
-Copy `.env.example` to `.env` if you do not already have a local `.env`, then
-replace its safe placeholders with your local configuration. Never commit
-`.env` or put credentials in source files. It is ignored by Git; `.env.example`
-is intended to be committed. Keep `.env` readable only by your account.
+The required input is [fixtures/banking-v2/accounts.csv](fixtures/banking-v2/accounts.csv),
+with its [checksum and provenance](fixtures/banking-v2/README.md).
+No original customer-email file, cards file or ignored snapshot is required.
+The generator uses fixed dates, a seed, stable account ordering, deterministic
+UUIDs and integer-pence arithmetic.
 
-Both the loader and Compose use `POSTGRES_USER`, `POSTGRES_PASSWORD` and
-`POSTGRES_DB`. `POSTGRES_PORT` is the host port published by Compose and the
-port used by the locally launched loader. `POSTGRES_HOST` is the loader's
-address for Postgres, normally `localhost` when Python runs on your computer.
-Compose does not need that host value: it starts the database itself.
+Expected generated CSV SHA-256:
 
-Compose reads `.env` for configuration interpolation. This does **not** export
-its variables to a separately launched Python process. The loader reads
-`os.environ` and does not automatically parse `.env`.
+```text
+119498f5d5fbc3dde9f3da8fee4e3b7e45e89ee0bd453a877d31cf62c68f0f74
+```
 
-For the supplied shell-compatible `.env`, launch Python from the project root
-with the variables exported in a subshell:
+For VS Code, select this project's `.venv/bin/python` as the interpreter.
+This does not configure Snowflake authentication.
+
+## Load and build in Snowflake
+
+Provision your own account/user, role `BANKING_DEVELOPER`, warehouse
+`BANKING_DEV_WH`, database `BANKING_ANALYTICS` and required permissions.
+These objects and authentication are not provisioned by the raw-table scripts.
+
+Configure `etl_project.outputs.snowflake_dev` in local
+`~/.dbt/profiles.yml`, using your account/login, target schema and encrypted
+private-key path. Register your public key with your Snowflake user.
+Keep profiles, private keys and passphrases outside Git.
+Detailed prerequisites are in [fresh-clone setup](docs/fresh-clone-banking.md).
+
+Execute these files separately in a Snowflake worksheet:
+
+1. [02_raw_transactions.sql](sql/snowflake/02_raw_transactions.sql)
+2. [03_raw_accounts.sql](sql/snowflake/03_raw_accounts.sql)
+
+Then run the initial loads interactively from the project root:
+
+```sh
+uv run python scripts/load_accounts_snowflake.py
+uv run python scripts/load_transactions_snowflake.py
+```
+
+Each loader prompts privately for the encrypted key's passphrase. Inputs are
+validated before connecting. Both loaders refuse populated or incompatible
+tables and insert in one transaction, reconciling before commit. Accounts are
+compared field-for-field; transactions are compared by row count, unique-ID
+count and exact grouped counts/amounts. Failure triggers a rollback attempt.
+
+These are initial-load tools, not recurring ingestion. Run only one loader
+at a time; the empty-table check is not a concurrency lock. If commit
+confirmation is lost, inspect the target before retrying.
+
+Run the full dbt build from the project root in **zsh**:
+
+```zsh
+(
+  read -rs 'DBT_ENV_SECRET_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE?Private key passphrase: '
+  printf '\n'
+  export DBT_ENV_SECRET_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE
+  uv run dbt build --project-dir dbt --profiles-dir "$HOME/.dbt" \
+    --target snowflake_dev
+)
+```
+
+Configure dbt's `private_key_passphrase` to read that environment variable as
+described in the setup guide. The loaders use their own hidden prompt instead.
+The subshell limits the exported variable to this command group.
+
+`--project-dir dbt` locates `dbt/dbt_project.yml`. Without a selection filter,
+the build covers all six active models and 66 defined data tests, including
+source tests. It does not invoke Python loaders. See
+[accounts ingestion](docs/accounts-ingestion.md) for account-specific details.
+
+## Validation and evidence
+
+| Check | Purpose |
+| --- | --- |
+| Fixture/output hashes | Detect changed input or generated CSV bytes |
+| Python validations | Validate shape, IDs, amounts, dates, categories and linked refunds |
+| Python tests | Exercise reproduction, loader refusals/rollback and SQL guardrails locally |
+| dbt key/category tests | Detect missing fields, duplicate keys and invalid categories |
+| Relationship/date tests | Validate account references, opening dates and refund parents |
+| Full-row model reconciliation | Detect missing, changed or duplicated records between models |
+| Per-transaction join cardinality | Require exactly one matching dimension account |
+| Monthly rollup reconciliation | Match account-type totals to the overall monthly baseline |
+
+The current Python suite has 20 test methods; some contain multiple scenarios.
+Mocked connections and SQLite guardrail tests do not establish live Snowflake
+authentication or full Snowflake SQL compatibility.
+
+Historical evidence reported during development:
+- The initial two-model Snowflake build passed its 27 selected tests.
+- The later staging/dimension/fact build passed its 47 selected tests.
+- The developer reported a successful full-project run; its final run artifact
+  is not committed here.
+- The reproducibility change passed 20 local tests in the working directory
+  and a temporary checkout containing only tracked/proposed files, reproducing
+  the CSV byte-for-byte. That check reused the installed Python environment;
+  installation on a new machine was not independently repeated.
+
+These are historical results, not guarantees about the current warehouse.
+Inspect your own `dbt/target/run_results.json` after each build.
+There is currently no GitHub Actions workflow; merging a PR does not
+automatically run these checks.
+
+## Metrics and example findings
+
+Only completed attempts enter monetary summaries. Transaction count includes
+both completed payments and refunds. Amounts are positive magnitudes:
+payments are debits, refunds are credits, and net outflow is debits minus credits.
+Refunds are assigned to their own transaction month.
+
+Developer-supplied Snowflake results across April–September 2026:
+
+| Measure | Result |
+| --- | ---: |
+| Completed transaction attempts | 9,000 |
+| Debit total | GBP 2,012,092.38 |
+| Credit total | GBP 226,623.07 |
+| Net outflow | GBP 1,785,469.31 |
+| Accounts with a completed transaction | 1,960 |
+| Accounts with attempts but none completed | 13 |
+| Accounts with no attempts | 27 |
+
+Credit accounts had the highest net outflow overall and per active account
+in this synthetic dataset. See [findings and definitions](docs/banking-analysis-findings.md).
+The three queries in [dbt/analyses](dbt/analyses) are saved analyses using
+`ref()`, not additional models created or executed by `dbt build`.
+
+## Scope and limitations
+
+- Data is synthetic: 2,000 accounts and 10,000 attempts, with exact designed
+  status allocations. It is not evidence of real customer behaviour.
+- April starts on April 21; monthly comparisons do not cover equal exposure.
+- GBP is the only supported dataset currency. Grouping by currency does not
+  imply that the current validations accept other currencies.
+- Refund generation favours later dates by construction; this can produce
+  apparent trends unrelated to real customer behaviour.
+- Account types and spend-profile labels are frozen attributes. Spend profile
+  is not calculated from observed transactions; attribute history is absent.
+- Synthetic account balance has no ledger/as-of meaning and stays out of
+  analytical models. Net outflow is not bank revenue or profit.
+- Accounts and transactions are the active scope; no customer/card dimensions,
+  API ingestion, S3 delivery, scheduling or NLP are implemented.
+- Loaders are initial-load only, with no status updates, recurring batches,
+  concurrency coordination or unattended authentication.
+- A Git branch does not isolate Snowflake objects. Use distinct target schemas
+  when separate database development environments are needed.
+
+See the [dataset specification](docs/banking-v2-dataset.md) for exact rules.
+
+## Repository guide
+
+| Path | Purpose |
+| --- | --- |
+| `fixtures/banking-v2/` | Minimal immutable synthetic input and provenance |
+| `scripts/generate_transactions_v2.py` | Reproducible transaction generation |
+| `scripts/load_*_snowflake.py` | Validated first-load ingestion |
+| `sql/snowflake/` | Raw-table definitions |
+| `dbt/models/staging/` | Source declarations and standardised records |
+| `dbt/models/marts/` | Dimension, fact and summaries |
+| `dbt/tests/` | Custom data-quality queries |
+| `dbt/analyses/` | Saved analytical queries |
+| `tests/` | Local Python tests |
+| `docs/` | Setup, design, dataset and analysis details |
+| `archive/dbt/` | Unfinished historical models, excluded from active paths |
+
+## Legacy examples
+
+The original Spoof configurations in `configs/` and
+`bundles/banking_bundle.json` describe customers, accounts, cards and transactions.
+Rerunning them is not the supported way to reproduce the frozen v2 dataset.
+
+`docker-compose.yml` starts Postgres 15 with persistent `pgdata` storage.
+`scripts/load_csvs.py` loads the four original CSVs into Postgres using pandas
+and SQLAlchemy, replacing destination tables. It does not load v2 into Snowflake.
+`scripts/etl_pipeline.py` is a separate retail-cleaning example with local paths.
+
+For legacy Postgres only, copy `.env.example` to an ignored local `.env`.
+Compose reads this file, but the Python loader reads exported environment
+variables. From the project root, with trusted shell-compatible values:
 
 ```sh
 (
@@ -195,93 +280,14 @@ with the variables exported in a subshell:
 )
 ```
 
-Only source a trusted local file: the shell executes its contents. Quote values
-using shell syntax, particularly passwords containing spaces, `$`, `#` or
-other special characters. SQLAlchemy `URL.create` accepts the resulting raw
-credential values without manually URL-encoding them. Alternatively, supply
-the five variables through your terminal or execution environment.
+This replaces legacy Postgres tables and requires its original CSVs and a
+running database. Changing `.env` does not change credentials already stored
+in an initialized Postgres volume. None of these legacy commands is required
+for the active Snowflake setup.
 
-Running the command above performs database writes and replaces existing
-tables. It requires the CSVs, a reachable Postgres database, and pandas,
-SQLAlchemy and psycopg2 in the Python environment. No dependency installation
-or pipeline execution is performed by repository configuration alone.
+## Next improvements
 
-The persistent Postgres volume retains its initialized database. Changing
-credentials in `.env` does not automatically change credentials in an already
-initialized database.
-
-## First dbt flow
-
-`banking_raw.transactions` declares the existing external table
-`BANKING_ANALYTICS.RAW.TRANSACTIONS`. `source('banking_raw', 'transactions')`
-resolves that input and records lineage; it does not create or reload raw data.
-
-`stg_transactions` explicitly selects and types all ten columns. Its grain
-is one row per transaction attempt, preserving every status and exact amounts.
-Blank payment parent IDs are normalized to NULL. It does not filter or
-deduplicate rows. `monthly_transaction_summary` uses `ref('stg_transactions')`
-to resolve the dbt-created view and establish build order. It filters completed
-rows and groups by calendar month and currency, so its grain is one row per
-month/currency with completed activity. Months without activity are absent.
-
-The summary columns are `transaction_month` (DATE), `currency` (VARCHAR(3)),
-`transaction_count` (integer count), `debit_total`, `credit_total`, and
-`net_outflow` (NUMBER(38,2)). Net outflow is debit total minus credit total.
-
-With the current Snowflake target schema DBT_AOIFE, default dbt schema generation
-appends the configured suffixes. The unquoted Snowflake object names are:
-
-- `BANKING_ANALYTICS.DBT_AOIFE_STAGING.STG_TRANSACTIONS`
-- `BANKING_ANALYTICS.DBT_AOIFE_MARTS.MONTHLY_TRANSACTION_SUMMARY`
-
-Both are views under the existing project configuration. They do not build
-directly in RAW or the unsuffixed DBT_AOIFE schema. BANKING_DEVELOPER needs
-SELECT access to the raw table and permission to create the output schemas/views.
-Different profile target schemas produce different output names.
-
-There are 27 tests: required fields, unique transaction IDs, accepted category
-values, positive amounts, type/direction rules, training date boundaries,
-blank payment links, valid refund parent relationships and unique refund
-parents, unique month/currency groups, and monthly count/amount reconciliation.
-Singular SQL tests pass only when they return zero failing rows.
-
-Local offline dbt parsing and Snowflake-dialect SQL syntax checks passed with
-dbt Core 1.12.5 / dbt-snowflake 1.12.1. No database model or test has been run
-by the agent. CSV-based expected summary: six GBP months, 9,000 completed rows,
-GBP 2,012,092.38 debits, GBP 226,623.07 credits, GBP 1,785,469.31 net outflow.
-
-Run the targeted build yourself from the project root in zsh:
-
-```zsh
-(
-  read -rs 'DBT_ENV_SECRET_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE?Private key passphrase: '
-  printf '\n'
-  export DBT_ENV_SECRET_SNOWFLAKE_PRIVATE_KEY_PASSPHRASE
-  uv run dbt build --project-dir dbt --profiles-dir "$HOME/.dbt" \
-    --target snowflake_dev --select +monthly_transaction_summary
-)
-```
-
-Enter the replacement key's passphrase; input stays hidden and the subshell
-discards the variable afterward. The leading `+` selects upstream dependencies
-as well as the summary, and their associated tests. This builds views and runs
-database tests; it never invokes the loader or alters raw transaction data.
-
-Archived models remain outside active paths. Their missing customer/account
-staging dependencies and historical activity/revenue calculation issues are
-still unfinished. The Postgres output is preserved, but these active models
-target Snowflake and should be built explicitly with `--target snowflake_dev`.
-
-## Planned Snowflake migration
-
-The first flow now has a loaded raw table (user-reported), source declaration,
-transaction staging, monthly summary and tests. Its first targeted dbt build
-and database test results remain pending.
-Local dbt Core key-pair connection testing for `snowflake_dev` has passed
-(user-run). The raw-table definition and Python loader are implemented;
-the reported live load reconciles to the CSV. Further banking models and a
-connection in the dbt browser UI still need implementation. The browser UI does not automatically load local
-CSVs or execute this Postgres loader.
-
-`full_project.txt` is an ignored historical project dump containing duplicated
-local credentials. It must not be included in the baseline commit.
+1. Automate local generation, validation and tests in GitHub Actions.
+2. Add recurring batches, safe replay and pending-to-completed status updates.
+3. Strengthen per-account-type expected-result checks and load audit records.
+4. Add separate database environments, then explore S3 delivery and scheduling.
