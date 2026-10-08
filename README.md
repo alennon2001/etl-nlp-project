@@ -191,8 +191,10 @@ Historical evidence reported during development:
 
 These are historical results, not guarantees about the current warehouse.
 Inspect your own `dbt/target/run_results.json` after each build.
-There is currently no GitHub Actions workflow; merging a PR does not
-automatically run these checks.
+[GitHub Actions](docs/continuous-integration.md) runs local generation,
+validate-only checks and the Python test suite on pull requests and pushes to
+main. It uses no Snowflake credentials and does not run the 66 database tests.
+Check each run's result; workflow presence alone is not evidence of a pass.
 
 ## Metrics and example findings
 
@@ -287,7 +289,6 @@ for the active Snowflake setup.
 
 ## Next improvements
 
-1. Automate local generation, validation and tests in GitHub Actions.
-2. Add recurring batches, safe replay and pending-to-completed status updates.
-3. Strengthen per-account-type expected-result checks and load audit records.
-4. Add separate database environments, then explore S3 delivery and scheduling.
+1. Add recurring batches, safe replay and pending-to-completed status updates.
+2. Strengthen per-account-type expected-result checks and load audit records.
+3. Add separate database environments, then explore S3 delivery and scheduling.

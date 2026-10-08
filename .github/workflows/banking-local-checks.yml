@@ -1,0 +1,55 @@
+name: Banking local checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  local-checks:
+    name: Reproduce and validate banking data
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      UV_PYTHON_PREFERENCE: only-managed
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: "0.12.23"
+          enable-cache: false
+
+      - name: Install pinned Python and locked dependencies
+        run: |
+          uv python install
+          uv sync --locked
+          uv pip check
+
+      - name: Generate reproducible transactions
+        run: uv run --locked python scripts/generate_transactions_v2.py
+
+      - name: Validate accounts without a database connection
+        run: uv run --locked python scripts/load_accounts_snowflake.py --validate-only
+
+      - name: Validate transactions without a database connection
+        run: uv run --locked python scripts/load_transactions_snowflake.py --validate-only
+
+      - name: Run local tests including exact CSV reproduction
+        run: uv run --locked python -m unittest discover -s tests -v
+
+      - name: Confirm tracked files remain unchanged
+        run: git diff --exit-code
